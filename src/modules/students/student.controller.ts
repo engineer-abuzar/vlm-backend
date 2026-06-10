@@ -4,6 +4,8 @@ import { prisma } from '../../config/prisma.ts';
 import type{ CreateStudentProfileDTO } from '../../types/student.dto.ts';
 import { Role } from '../../../generated/prisma/client.ts';
 
+
+// createStudent Logic
 export const createStudentProfile = async (
   req: Request<{}, {}, CreateStudentProfileDTO>,
   res: Response,
