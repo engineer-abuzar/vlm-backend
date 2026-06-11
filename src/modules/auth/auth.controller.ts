@@ -1,149 +1,230 @@
 import type { Request, Response } from 'express';
 import generateToken from '../../utils/jwt.ts';
-import { prisma } from "../../config/prisma.ts";
+import { prisma } from '../../config/prisma.ts';
 import { sendOTP } from '../../services/otp.ts';
+import type { AuthRequest } from '../../middleware/authenticate.ts';
 
+// ── POST /auth/sent-otp ─────────────────────────────────────
+export const sentOtp = async (req: Request, res: Response): Promise<void> => {
+  const { phone, email, role } = req.body;
 
-interface SentOtpRequest extends Request {
-}
+  if (!phone && !email) {
+    res.status(400).json({ message: 'Either phone or email must be provided' });
+    return;
+  }
 
-interface SentOtpResponse extends Response {
-}
+  // Find or create user
+  let user = await prisma.user.findFirst({
+    where: {
+      OR: [
+        email ? { email } : undefined,
+        phone ? { mobile: phone } : undefined,
+      ].filter(Boolean) as any,
+    },
+  });
 
-interface RegisterRequest extends Request {
-}
-interface RegisterResponse extends Response {
-}
-
-
-const sentOtp = async (req: SentOtpRequest, res: SentOtpResponse) => {
-    const { phone, email, role } = req.body;
-    let user = await prisma.user.findFirst({
-        where: {
-            OR: [{ email: email },
-            { mobile: phone }
-            ]
-        }
+  if (!user) {
+    const roleUpper = String(role || 'STUDENT').toUpperCase();
+    user = await prisma.user.create({
+      data: {
+        email: email || null,
+        mobile: phone || null,
+        role: roleUpper as any,
+      },
     });
-    if (!user) {
-        if (email) {
-        // Handle email registration
-       user= await prisma.user.create({
-            data: {
-                email: email,
-                role: role,
-            }
-        })
-        console.log("User Created with email")
+  }
 
+  const identifier = user.email || user.mobile || '';
+  await sendOTP(identifier);
+
+  res.json({ message: `OTP sent to ${user.email ? 'registered email' : 'registered phone'}` });
+};
+
+// ── POST /auth/otp/verify  (also aliased to /verify-otp) ────
+export const verifyOTP = async (req: Request, res: Response): Promise<void> => {
+  // Frontend sends { phone, otp }  OR  { identifier, otp }
+  const { phone, identifier: rawIdentifier, otp: inputOtp } = req.body;
+  const identifier = rawIdentifier || phone;
+
+  if (!identifier || !inputOtp) {
+    res.status(400).json({ message: 'identifier/phone and otp are required' });
+    return;
+  }
+
+  const record = await prisma.oTP.findUnique({ where: { identifier } });
+
+  if (!record) {
+    res.status(400).json({ message: 'No verification request found' });
+    return;
+  }
+
+  if (inputOtp !== record.otp) {
+    // Dev bypass: in development, allow "000000" as master OTP
+    const isDev = process.env.NODE_ENV === 'development';
+    const isMasterOtp = isDev && inputOtp === '000000';
+    if (!isMasterOtp) {
+      res.status(400).json({ message: 'Invalid verification code' });
+      return;
     }
-    else if (phone) {
-        // Handle phone registration
-       user= await prisma.user.create({
-            data: {
-                mobile: phone,
-                role: String(role).toUpperCase() as any
-            }
-        })
-        console.log("User Created with phone")
+  }
 
-    }
-    else {
-        res.status(400).send("Either phone or email must be provided");
-        return;
-    }
-    }
+  if (new Date() > record.expiresAt) {
+    await prisma.oTP.delete({ where: { identifier } });
+    res.status(400).json({ message: 'Verification code has expired' });
+    return;
+  }
 
-    await sendOTP(user.email || user.mobile || " "); // Send OTP to either email or mobile
-   if(user.email)
+  await prisma.oTP.delete({ where: { identifier } });
 
-    { console.log("otp sent on email")
-        return res.json({ message: `OTP sent to registered email` })
-}
-     console.log("otp sent on phone")
+  const user = await prisma.user.findFirst({
+    where: {
+      OR: [{ email: identifier }, { mobile: identifier }],
+    },
+    include: {
+      studentProfile: true,
+      parentProfile: true,
+      teacherProfile: true,
+      wallet: true,
+    },
+  });
 
-   res.json({ message: `OTP sent to registered phone` })
-}
+  if (!user) {
+    res.status(404).json({ message: 'User not found' });
+    return;
+  }
 
-export async function verifyOTP(req: Request, res: Response): Promise<void> {
-    // 1. Fetch the OTP record from the database
-    // console.log("verify is working")
-    const { identifier, otp: inputOtp } = req.body;
-    const record = await prisma.oTP.findUnique({
-        where: { identifier: identifier },
-    });
+  // Determine isNewUser: no profile exists yet
+  const isNewUser =
+    !user.studentProfile && !user.teacherProfile && !user.parentProfile;
 
-    if (!record) {
-        throw new Error('No verification request found for this email');
-    }
+  const token = generateToken({
+    userId: user.id,
+    email: user.email,
+    mobile: user.mobile,
+    role: user.role,
+  });
 
-    // 2. Validate input OTP against stored database OTP
-    if (inputOtp !== record.otp) {
-        throw new Error('Invalid verification code');
-    }
+  res.status(200).json({
+    message: 'OTP verified successfully',
+    token,
+    isNewUser,
+    user: {
+      id: user.id,
+      email: user.email,
+      mobile: user.mobile,
+      role: user.role,
+      studentProfile: user.studentProfile,
+      parentProfile: user.parentProfile,
+      teacherProfile: user.teacherProfile,
+    },
+  });
+};
 
-    // 3. Verify expiration timeline
-    const now = new Date();
-    if (now > record.expiresAt) {
-        // Optional clean up: delete expired code immediately
-        await prisma.oTP.delete({ where: { identifier: identifier } });
-        throw new Error('Verification code has expired');
-    }
+// ── POST /auth/role ─────────────────────────────────────────
+export const selectRole = async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user?.userId;
+  const { role } = req.body;
 
-    // 4. Clean up: Delete the used OTP code so it can never be reused malicious players
-    await prisma.oTP.delete({
-        where: { identifier: identifier },
-    });
-    const token = generateToken({ email: identifier });
-    res.cookie('token', token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
-    res.status(200).json({ message: 'OTP verified successfully' });
-}
+  if (!userId) {
+    res.status(401).json({ message: 'Unauthorized' });
+    return;
+  }
 
-const Register = async (req: RegisterRequest, res: RegisterResponse): Promise<void> => {
-    const { mobile, email, role } = req.body;
-    console.log("Received registration request:", { mobile, email, role });
-    const existingUser = await prisma.user.findFirst({
-        where: {
-            OR:[
-            email && { email },
-            mobile && { mobile }
-        ].filter(Boolean)
-        }
-    })
-    if (existingUser) {
-        res.status(400).send("User already exists");
-        return;
-    }
-    if (email) {
-        // Handle email registration
-        await prisma.user.create({
-            data: {
-                email: email,
-                role: role,
-            }
-        })
-        res.status(201).send("User registered with email");
+  if (!role) {
+    res.status(400).json({ message: 'role is required' });
+    return;
+  }
 
-    }
-    else if (mobile) {
-        // Handle phone registration
-        await prisma.user.create({
-            data: {
-                mobile: mobile,
-                role: String(role).toUpperCase() as any
-            }
-        })
-        res.status(201).send("User registered with phone");
-    }
-    else {
-        res.status(400).send("Either phone or email must be provided");
-        return;
-    }
-}
+  const updatedUser = await prisma.user.update({
+    where: { id: userId },
+    data: { role: String(role).toUpperCase() as any },
+  });
 
-export { sentOtp, Register };
+  const token = generateToken({
+    userId: updatedUser.id,
+    email: updatedUser.email,
+    mobile: updatedUser.mobile,
+    role: updatedUser.role,
+  });
+
+  res.json({ message: 'Role updated', token, user: updatedUser });
+};
+
+// ── GET /auth/me ────────────────────────────────────────────
+export const getCurrentUser = async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user?.userId;
+
+  if (!userId) {
+    res.status(401).json({ message: 'Unauthorized' });
+    return;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      studentProfile: { include: { plan: true, subscription: true } },
+      teacherProfile: true,
+      parentProfile: true,
+      wallet: true,
+    },
+  });
+
+  if (!user) {
+    res.status(404).json({ message: 'User not found' });
+    return;
+  }
+
+  res.status(200).json({ user });
+};
+
+// ── POST /auth/logout ───────────────────────────────────────
+export const logout = (_req: Request, res: Response): void => {
+  res.clearCookie('token');
+  res.status(200).json({ message: 'Logged out successfully' });
+};
+
+// ── GET /auth/google ────────────────────────────────────────
+export const googleAuthUrl = (_req: Request, res: Response): void => {
+  // Placeholder — integrate actual Google OAuth when needed
+  const clientId = process.env.GOOGLE_CLIENT_ID || '';
+  const redirectUri = process.env.GOOGLE_REDIRECT_URI || `${process.env.CLIENT_URL}/auth/google/callback`;
+  const url =
+    `https://accounts.google.com/o/oauth2/v2/auth` +
+    `?client_id=${clientId}` +
+    `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+    `&response_type=code` +
+    `&scope=openid%20email%20profile`;
+
+  res.json({ url });
+};
+
+// ── POST /auth/register ─────────────────────────────────────
+export const Register = async (req: Request, res: Response): Promise<void> => {
+  const { mobile, email, role } = req.body;
+
+  const existingUser = await prisma.user.findFirst({
+    where: {
+      OR: [
+        email ? { email } : undefined,
+        mobile ? { mobile } : undefined,
+      ].filter(Boolean) as any,
+    },
+  });
+
+  if (existingUser) {
+    res.status(400).json({ message: 'User already exists' });
+    return;
+  }
+
+  const roleUpper = String(role || 'STUDENT').toUpperCase();
+
+  const user = await prisma.user.create({
+    data: {
+      email: email || null,
+      mobile: mobile || null,
+      role: roleUpper as any,
+    },
+  });
+
+  res.status(201).json({ message: 'User registered successfully', user });
+};
