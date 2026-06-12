@@ -16,7 +16,8 @@ interface RegisterResponse extends Response {
 }
 
 
-const sentOtp = async (req: SentOtpRequest, res: SentOtpResponse) => {
+const sentOtp = async (req: SentOtpRequest, res: SentOtpResponse):Promise<any> => {
+    console.log("Received OTP request:", req.body);
     const { phone, email, role } = req.body;
     let user = await prisma.user.findFirst({
         where: {

@@ -9,9 +9,9 @@ const app=express();
 app.use(cors({origin:"*",credentials:true}));
 
 app.use(express.json());
-app.get("/",(req,res)=>{
-res.send("API running")
-})
+// app.get("/",(req,res)=>{
+// res.send("API running")
+// })
 
 app.use("/api/v1/auth",authRouter);
 app.use("/api/v1/student",studentRouter);

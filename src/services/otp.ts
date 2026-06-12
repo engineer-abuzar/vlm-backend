@@ -27,6 +27,7 @@ export async function sendOTP(identifier: string): Promise<void> {
   const otp: string = generateOTP();
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes validity
   const isEmail = identifier.includes('@');
+  console.log(identifier)
   if (isEmail) {
     {
       const mailOptions: nodemailer.SendMailOptions = {
