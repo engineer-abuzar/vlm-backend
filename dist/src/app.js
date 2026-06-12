@@ -16,7 +16,8 @@ import subjectsRouter from "./modules/subjects/subjects.routes.js";
 import errorMiddleware from "./utils/errorMiddleWare.js";
 const app = express();
 app.use(cors({
-    origin: process.env.CLIENT_URL || "*",
+    // origin: process.env.CLIENT_URL || "*",
+    origin: "*",
     credentials: true,
 }));
 app.use(express.json());
