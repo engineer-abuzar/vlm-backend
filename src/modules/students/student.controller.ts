@@ -1,139 +1,135 @@
-
-import type{ Request, Response, NextFunction } from 'express';
+import type { Response } from 'express';
 import { prisma } from '../../config/prisma.ts';
-import type{ CreateStudentProfileDTO } from '../../types/student.dto.ts';
+import type { AuthRequest } from '../../middleware/authenticate.ts';
 import { Role } from '../../../generated/prisma/client.ts';
 
-
-// createStudent Logic
+// ── POST /student/profile ─────────────────────────────────────
 export const createStudentProfile = async (
-  req: Request<{}, {}, CreateStudentProfileDTO>,
-  res: Response,
-  next: NextFunction
+  req: AuthRequest,
+  res: Response
 ): Promise<void> => {
-    const { userId, fullName, nickname, class: className, board, schoolName, city, state } = req.body;
+  const userId = req.user?.userId;
 
-    // 1. Strict Validation: Check required fields
-    if (!userId || !fullName) {
-      res.status(400).json({ error: 'userId and fullName are required fields.' });
-      return;
-    }
+  if (!userId) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
 
-    // 2. Fetch the target user to verify they exist and match the STUDENT role
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: { studentProfile: true }
-    });
+  const { fullName, nickname, className, board, schoolName, city, state } = req.body;
 
-    if (!user) {
-      res.status(404).json({ error: 'User not found.' });
-      return;
-    }
+  if (!fullName) {
+    res.status(400).json({ error: 'fullName is required' });
+    return;
+  }
 
-    if (user.role !== Role.STUDENT) {
-      res.status(400).json({ error: 'The specified user does not have a STUDENT role.' });
-      return;
-    }
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { studentProfile: true },
+  });
 
-    if (user.studentProfile) {
-      res.status(409).json({ error: 'A student profile already exists for this user.' });
-      return;
-    }
+  if (!user) {
+    res.status(404).json({ error: 'User not found' });
+    return;
+  }
 
-    // 3. Create the profile inside a database transaction block for safety
-    const newProfile = await prisma.studentProfile.create({
-      data: {
-        userId,
-        fullName,
-        nickname,
-        class: className,
-        board,
-        schoolName,
-        city,
-        state
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            email: true,
-            mobile: true,
-            role: true
-          }
-        }
-      }
-    });
+  if (user.role !== Role.STUDENT) {
+    res.status(400).json({ error: 'User does not have a STUDENT role' });
+    return;
+  }
 
-    res.status(201).json({
-      message: 'Student profile created successfully.',
-      data: newProfile
-    });
+  if (user.studentProfile) {
+    res.status(409).json({ error: 'Student profile already exists' });
+    return;
+  }
 
-  
+  const newProfile = await prisma.studentProfile.create({
+    data: {
+      userId,
+      fullName,
+      nickname,
+      className,
+      board,
+      schoolName,
+      city,
+      state,
+    },
+    include: {
+      user: { select: { id: true, email: true, mobile: true, role: true } },
+    },
+  });
+
+  // Create wallet if it doesn't exist
+  await prisma.wallet.upsert({
+    where: { userId },
+    create: { userId, balance: 0 },
+    update: {},
+  });
+
+  res.status(201).json({
+    message: 'Student profile created successfully',
+    data: newProfile,
+  });
 };
+
+// ── GET /student/profile ──────────────────────────────────────
 export const getStudentProfile = async (
-  req: Request<{}, {}, CreateStudentProfileDTO>,
-  res: Response,
-  next: NextFunction
+  req: AuthRequest,
+  res: Response
 ): Promise<void> => {
-    const { userId } = req.query;
+  const userId = req.user?.userId;
 
-    // 1. Strict Validation: Check required fields
-    if (!userId) {
-      res.status(400).json({ error: 'userId is required fields.' });
-      return;
-    }
+  if (!userId) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
 
-    // 2. Fetch the target user to verify they exist and match the STUDENT role
-    const user = await prisma.studentProfile.findMany()
+  const profile = await prisma.studentProfile.findUnique({
+    where: { userId },
+    include: {
+      user: { select: { id: true, email: true, mobile: true, role: true } },
+      plan: true,
+      subscription: { include: { plan: true } },
+    },
+  });
 
-    // if (!user) {
-    //   res.status(404).json({ error: 'User not found.' });
-    //   return;
-    // }
+  if (!profile) {
+    res.status(404).json({ error: 'Student profile not found' });
+    return;
+  }
 
-    // if (user.role !== Role.STUDENT) {
-    //   res.status(400).json({ error: 'The specified user does not have a STUDENT role.' });
-    //   return;
-    // }
-
-   
-      res.status(200).json({ message: 'User Profile Fetched.' ,User:user});
-      return;
-    
-
-   
+  res.status(200).json({ message: 'Profile fetched', data: profile });
 };
+
+// ── PATCH /student/profile ────────────────────────────────────
 export const updateStudentProfile = async (
-  req: Request<{}, {}, CreateStudentProfileDTO>,
-  res: Response,
-  next: NextFunction
+  req: AuthRequest,
+  res: Response
 ): Promise<void> => {
-    const { userId,fullName,nickname,className,board,schoolName,city,state } = req.body;
+  const userId = req.user?.userId;
 
-    // 1. Strict Validation: Check required fields
-    if (!userId) {
-      res.status(400).json({ error: 'userId is required fields.' });
-      return;
-    }
+  if (!userId) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
 
-    // 2. Fetch the target user to verify they exist and match the STUDENT role
-    const user = await prisma.studentProfile.update({
-      where: { userId: userId },
-    data:{fullName:fullName,nickname:nickname,className:className,board:board,schoolName:schoolName,city:city,state:state},
-    });
+  const { fullName, nickname, className, board, schoolName, city, state } = req.body;
 
-    if (!user) {
-      res.status(404).json({ error: 'User not found.' });
-      return;
-    }
+  const updated = await prisma.studentProfile.update({
+    where: { userId },
+    data: {
+      ...(fullName && { fullName }),
+      ...(nickname !== undefined && { nickname }),
+      ...(className !== undefined && { className }),
+      ...(board !== undefined && { board }),
+      ...(schoolName !== undefined && { schoolName }),
+      ...(city !== undefined && { city }),
+      ...(state !== undefined && { state }),
+    },
+    include: {
+      user: { select: { id: true, email: true, mobile: true, role: true } },
+      plan: true,
+    },
+  });
 
-    
-
-   
-      res.status(200).json({ message: 'User Profile Updated.' ,User:user});
-      return;
-    
-
-   
+  res.status(200).json({ message: 'Profile updated', data: updated });
 };

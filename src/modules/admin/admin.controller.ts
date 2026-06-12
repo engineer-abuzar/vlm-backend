@@ -22,9 +22,7 @@ export const createPlan =
     });
   }
 
-  export const getPlans=async (req:Request,res:Response)=>{
-    const plans=await prisma.plan.findMany()
-    if(!plans)
-         res.status(404).json({error:"Plans not found"})
-    res.status(200).json({message:"Plans Found ",data:plans})
-  }
+  export const getPlans = async (req: Request, res: Response) => {
+    const plans = await prisma.plan.findMany();
+    res.status(200).json({ message: 'Plans found', data: plans });
+  };

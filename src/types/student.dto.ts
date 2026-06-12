@@ -1,4 +1,3 @@
-
 export interface CreateStudentProfileDTO {
   userId: string;
   fullName: string;
