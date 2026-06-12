@@ -1,0 +1,26 @@
+import type { Response } from 'express';
+import type { AuthRequest } from '../../middleware/authenticate.ts';
+export declare const createTeacherProfile: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const getTeacherProfile: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const updateTeacherProfile: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const uploadProfilePhoto: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const uploadDocument: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const uploadDemoVideo: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const submitForVerification: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const getVerificationStatus: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const updateAvailability: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const getTimeSlots: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const saveTimeSlots: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const getTeacherDashboard: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const getNotifications: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const markNotificationRead: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const getAvailableTeachers: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const assignDoubt: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const getTeacherDoubts: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const getTeacherSessions: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const createSession: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const endSession: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const acceptSessionRequest: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const declineSessionRequest: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const getSessionChat: (req: AuthRequest, res: Response) => Promise<void>;
+//# sourceMappingURL=teacher.controller.d.ts.map

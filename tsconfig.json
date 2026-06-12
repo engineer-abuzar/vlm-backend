@@ -1,9 +1,8 @@
 {
   // Visit https://aka.ms/tsconfig to read more about this file
   "compilerOptions": {
-    "allowImportingTsExtensions": true,
-    "noEmit": true,
-    // File Layout
+    "noEmit": false,
+    "rewriteRelativeImportExtensions": true,
     // "rootDir": "./src",
     "outDir": "./dist",
  "baseUrl": ".",
