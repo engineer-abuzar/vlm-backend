@@ -21,7 +21,7 @@ const app = express();
 app.use(
   cors({
     // origin: process.env.CLIENT_URL || "*",
-    origin: "*",
+    origin: ["http://localhost:5173", "https://www.vlmacademy.co.in","https://vlmacademy.co.in"],
     credentials: true,
   })
 );
