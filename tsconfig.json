@@ -5,7 +5,7 @@
     "noEmit": true,
     // File Layout
     // "rootDir": "./src",
-    // "outDir": "./dist",
+    "outDir": "./dist",
  "baseUrl": ".",
 
     "paths": {
